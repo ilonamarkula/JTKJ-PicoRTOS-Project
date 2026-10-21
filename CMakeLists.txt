@@ -8,9 +8,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # == EDIT at the beginning. Define the Project name and name for the main target (app).=========
 # Define project name
-set(APP_NAME JTKJ_app) 
+set(APP_NAME hihii_projekti) 
 # Define main app (app in this folder)
-set(MAIN_TARGET hat_app)
+set(MAIN_TARGET main_hihii)
 #===============================================================================================
 
 # Initialise pico_sdk from installed location
@@ -85,13 +85,13 @@ add_subdirectory(libs/usb-serial-debug)
 # Add examples if necessary here
 # Uncomment the examples that you want to include in your project.
 #
-# add_subdirectory(examples/hello_blink)
-# add_subdirectory(examples/hello_blink_freertos)
+add_subdirectory(examples/hello_blink)
+add_subdirectory(examples/hello_blink_freertos)
 # add_subdirectory(examples/hello_pico)
 # add_subdirectory(examples/hello_freertos)
 # add_subdirectory(examples/hello_dual_cdc)
 # add_subdirectory(examples/hello_microphone)
-# add_subdirectory(examples/compilation_errors)
+add_subdirectory(examples/compilation_errors)
 add_subdirectory(examples/hello_hat)
 # add_subdirectory(examples/hat_example)
 add_subdirectory(examples/hat_imu_ex)
