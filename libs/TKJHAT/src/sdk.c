@@ -536,15 +536,15 @@ void init_veml6030() {
 // Note: sampling time should be > IT -> in this case it has been 100ms by defintion. 
 uint32_t veml6030_read_light() {
 
-    // Exercise 2: In order to get the illuminance we need to read the value of the VEML6030_ALS_REG (see VEML6030 datasheet)
-    //            Use functions i2c_write_blocking and i2c_read_blocking to collect illuminance data.
-    //            These functions are found in the Pico SDK:
-    //            https://www.raspberrypi.com/documentation/pico-sdk/hardware.html#group_hardware_i2c
-    //            The i2c that you must use is i2c_default.  
-    //            from the sensor. Make necessary bitwise operation to store the results in a register of 16 bits.
-    //            Multiply the value by the adequate value considering Integration Time of 100 ms and Gain of 1/8
-    //            using data of page 5 of VEML6030 design application document: https://www.vishay.com/docs/84367/designingveml6030.pdf
-    //            Finally, store the value in the variable luxVal_uncorrected.
+
+    uint8_t txBuffer[1]; // Varaamme yhden tavun datan lähettämiseen I2C-väylän kautta.
+    uint8_t rxBuffer[2]; // Varaamme kaksi tavua datan vastaanottamiseen I2C-väylän kautta.
+
+    i2c_write_blocking(i2c_default, VEML6030_I2C_ADDRESS, txBuffer, 1, true);
+    i2c_read_blocking(i2c_default, VEML6030_I2C_ADDRESS, rxBuffer, 2, false);
+
+    
+
     //
     // Tehtävä 2: Saadaksemme valaistusvoimakkuuden meidän tulee lukea VEML6030_ALS_REG -rekisterin arvo (katso VEML6030-datalehti).
     //            Käytä funktioita i2c_write_blocking ja i2c_read_blocking valaistusvoimakkuusdatan keräämiseen.
@@ -557,6 +557,17 @@ uint32_t veml6030_read_light() {
     //            Lopuksi tallenna arvo muuttujaan luxVal_uncorrected.
   
     uint32_t luxVal_uncorrected = 0; 
+
+
+    uint16_t tulos = ((uint16_t) rxBuffer[0]) << 8;
+    luxVal_uncorrected = tulos | (uint16_t)rxBuffer[1];
+    double kerroin = 0.5376;
+    luxVal_uncorrected = luxVal_uncorrected * kerroin;
+
+    
+
+
+
     if (luxVal_uncorrected>1000){
         // Polynomial is pulled from pg 10 of the datasheet. 
         // See https://github.com/sparkfun/SparkFun_Ambient_Light_Sensor_Arduino_Library/blob/efde0817bd6857863067bd1653a2cfafe6c68732/src/SparkFun_VEML6030_Ambient_Light_Sensor.cpp#L409
@@ -568,7 +579,6 @@ uint32_t veml6030_read_light() {
     }
     return  luxVal_uncorrected;
 }
-
 
 
 //This method might be utility method in the future.

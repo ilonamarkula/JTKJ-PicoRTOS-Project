@@ -8,9 +8,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # == EDIT at the beginning. Define the Project name and name for the main target (app).=========
 # Define project name
-set(APP_NAME hihii_projekti) 
+set(APP_NAME JTKJ_app) 
 # Define main app (app in this folder)
-set(MAIN_TARGET main_hihii)
+set(MAIN_TARGET hat_app)
 #===============================================================================================
 
 # Initialise pico_sdk from installed location
@@ -120,7 +120,7 @@ add_executable(${MAIN_TARGET}
 #   * FreeRTOS-Kernel-Heap4 -> Memory allocators for FreeRTOS
 #   * TKJHAT_SDK -> SDK to control the HAT
 #   * usb_serial_debug -> Auxiliar library which creates two serial ports one for sending data an the other for debug
-#
+#Version 0.83
 target_link_libraries(${MAIN_TARGET}
         pico_stdlib
         FreeRTOS-Kernel
