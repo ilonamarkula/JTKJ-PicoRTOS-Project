@@ -17,14 +17,14 @@
 
 #define DEFAULT_STACK_SIZE 2048
 #define CDC_ITF_TX      1
-#define BUTTON1 2
 
 
 
 // Tehtävä 3: Tilakoneen esittely Add missing states.
 // Exercise 3: Definition of the state machine. Add missing states.
-enum state { WAITING=1};
+enum state { WAITING=1, DATA_READY=2};
 enum state programState = WAITING;
+
 
 // Tehtävä 3: Valoisuuden globaali muuttuja
 // Exercise 3: Global variable for ambient light
@@ -49,8 +49,12 @@ static void sensor_task(void *arg){
         // Exercise 2: Modify with application code here. Comment following line.
         //             Read sensor data anICM42670Fxnd print it out as string; 
         //tight_loop_contents(); 
-        uint32_t data = veml6030_read_light();
-        printf("Valoisuus: %d\n", data);
+        
+        if (programState == WAITING) {
+            ambientLight = veml6030_read_light();
+            programState = DATA_READY;
+        }
+        
 
    
 
@@ -85,22 +89,15 @@ static void print_task(void *arg){
         // Tehtävä 3: Kun tila on oikea, tulosta sensoridata merkkijonossa serial-monitor-ikkunaan
         //            Muista tilamuutos
         //            Älä unohda kommentoida seuraavaa koodiriviä.
-        // Exercise 3: Print out sensor data as string to serial monitor if the state is correct
-        //             Remember to modify state
-        //             Do not forget to comment next line of code.
-        tight_loop_contents();
+
+        // tight_loop_contents();
+        if (programState == DATA_READY) {
+            printf("Valoisuus: %d\n", ambientLight);
+            programState = WAITING;
+        }
+
         
 
-
-        
-        // Exercise 4. Use usb_serial_print() instead of printf() for debug output
-        //             produced after the USB serial library has been initialized.
-        //             Do not replace error messages that can execute before usb_serial_init().
-        //             Use the TinyUSB library to send data through the other serial port (CDC 1).
-        //             You can use the functions at https://github.com/hathach/tinyusb/blob/master/src/class/cdc/cdc_device.h
-        //             You can find an example at hello_dual_cdc
-        //             The data written using this should be provided using csv
-        //             timestamp, illuminance
         // Tehtävä 4. Käytä usb_serial_print()-funktiota printf()-funktion sijaan
         //            debug-tulostukseen sen jälkeen, kun USB-sarjaliikennekirjasto on alustettu.
         //            Älä korvaa virheilmoituksia, jotka voivat suorittua ennen usb_serial_init()-kutsua.
@@ -118,7 +115,7 @@ static void print_task(void *arg){
         printf("printTask\n");
         
         // Do not remove this
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
 
