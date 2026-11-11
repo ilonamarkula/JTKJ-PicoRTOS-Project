@@ -21,37 +21,67 @@ enum state programState = IDLE;
 volatile bool button1_pressed = false;
 volatile bool button2_pressed = false;
 
-static void example_task(void *arg){
-    (void)arg;
 
-    for(;;){
-        tight_loop_contents(); // Modify with application code here.
-        vTaskDelay(pdMS_TO_TICKS(2000));
+// vakiot eri asennoille
+typedef enum {
+    POSITION_UNKNOWN,
+    POSITION_VERTICAL,
+    POSITION_HORIZONTAL,
+    WAITING,
+    READ_SENSOR,
+    SEND_MESSAGE
+} position_t;
+
+// oletustila
+volatile state_t state = WAITING;
+
+static void btn_fxn(uint gpio, uint32_t eventMask) {
+    if(gpio == BUTTON1 && (eventMask & GPIO_IRQ_EDGE_FALL)) {
+        button1_pressed = true;
     }
+    else if (gpio == BUTTON2 && (eventMask & GPIO_IRQ_EDGE_FALL)) {
+        button2_pressed = true;
+    }
+
+position_t recognizePosition(void) {
+    float ax, ay, az, gx, gy, gz, t;
+
+    if (ICM42670_read_sensor_data(
+            &ax, &ay, &az, &gx, &gy, &gz, &t) != 0) {
+        return POSITION_UNKNOWN;
+    }
+
+    if (fabsf(az) < 0.4f) {
+        return POSITION_VERTICAL;
+    }
+
+    if (fabsf(az) > 0.7f) {
+        return POSITION_HORIZONTAL;
+    }
+
+    return POSITION_UNKNOWN;
 }
 
-// toteutetaan serial client yhteys sitten myös
+
+
+/*
+
+    Taski()
+     taskin sisällä mitataan arvoja
+     ja kun nappia painetaan niin kutsutaan nappi keskeytyskäsittelijää
+     nappi tulostaa joko pisteen tai viivan
 
 
 
-void button1_task(void *pvParameters) {
+*/
+
+
+void read_IMU(void *pvParameters) {
     (void)pvParameters;
 
     while (1) {
-        sw1_pressed = gpio_get(BUTTON1);
 
-        if (sw1_pressed) {
 
-            if (ICM42670_read_sensor_data(
-                    &ax, &ay, &az, &gx, &gy, &gz, &t) == 0) {
-
-                if (fabsf(az) < 0.4f) {
-                    printf("PISTE .\n");
-                }
-                else if (fabsf(az) > 0.7f) {
-                    printf("VIIVA -\n");
-                }
-            }
         }
     vTaskDelay(10);
     }
@@ -66,6 +96,16 @@ void button2_task(void *pvParameters) {
     }
 }
 
+
+/* tehkää taski mitatkaa sen sisällä IMUn arvoja
+
+tehkää napinkeskeytyskäsittelijä
+
+nappi tulostaa arvoja
+
+
+*/
+
 int main() {
     stdio_init_all();
     // Uncomment this lines if you want to wait till the serial monitor is connected
@@ -75,6 +115,19 @@ int main() {
     init_hat_sdk();
     sleep_ms(300); //Wait some time so initialization of USB and hat is done.
 
+    init_sw1();
+    init_sw2();
+
+    gpio_set_irq_enabled_with_callback(BUTTON1, GPIO_IRQ_EDGE_FALL, true, btn_fxn);
+    gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_FALL, true, btn_fxn);
+
+    btn_fxn(){
+        if(nappi = 1)
+        //tekee jtoain
+
+        jos nappi= 2
+        /tekee jotain
+    }
     TaskHandle_t myExampleTask = NULL;
     // Create the tasks with xTaskCreate
     BaseType_t result = xTaskCreate(example_task,       // (en) Task function

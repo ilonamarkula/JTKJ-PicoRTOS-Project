@@ -31,6 +31,21 @@ enum state programState = WAITING;
 uint32_t ambientLight;
 
 static void btn_fxn(uint gpio, uint32_t eventMask) {
+    if(gpio == BUTTON1 && (eventMask & GPIO_IRQ_EDGE_FALL)) {
+            //tulee teidän koodi 67
+
+
+    }
+    else if (gpio == BUTTON2 && (eventMask & GPIO_IRQ_EDGE_FALL)) {
+        
+    }
+
+
+    {
+        /* code */
+    }
+    
+
     // Tehtävä 1: Vaihda LEDin tila käyttämällä TKJHAT SDK:n sopivaa funktiota.
     toggle_led();
 }
