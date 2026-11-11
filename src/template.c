@@ -17,12 +17,52 @@
 enum state { IDLE=1 };
 enum state programState = IDLE;
 
+// Flag to indicate button press
+volatile bool button1_pressed = false;
+volatile bool button2_pressed = false;
+
 static void example_task(void *arg){
     (void)arg;
 
     for(;;){
         tight_loop_contents(); // Modify with application code here.
         vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+}
+
+// toteutetaan serial client yhteys sitten myös
+
+
+
+void button1_task(void *pvParameters) {
+    (void)pvParameters;
+
+    while (1) {
+        sw1_pressed = gpio_get(BUTTON1);
+
+        if (sw1_pressed) {
+
+            if (ICM42670_read_sensor_data(
+                    &ax, &ay, &az, &gx, &gy, &gz, &t) == 0) {
+
+                if (fabsf(az) < 0.4f) {
+                    printf("PISTE .\n");
+                }
+                else if (fabsf(az) > 0.7f) {
+                    printf("VIIVA -\n");
+                }
+            }
+        }
+    vTaskDelay(10);
+    }
+}
+
+void button2_task(void *pvParameters) {
+    (void)pvParameters;
+
+    while (1) {
+        sw1_pressed = gpio_get(BUTTON2);
+        vTaskDelay(10);
     }
 }
 
