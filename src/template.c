@@ -16,23 +16,21 @@
 // Default stack size for the tasks. It can be reduced to 1024 if task is not using lot of memory.
 #define DEFAULT_STACK_SIZE 2048 
 
-//Add here necessary states
-enum state { IDLE=1 };
-enum state programState = IDLE;
-
-// Flag to indicate button press
-volatile bool button1_pressed = false;
-volatile bool button2_pressed = false;
-volatile bool button2_released = false;
-volatile TickType_t button2_press_time = 0;
-volatile TickType_t button2_release_time = 0;
-
 // Ohjelman tilat
 typedef enum {
     WAITING,
     READ_SENSOR,
-    SEND_MESSAGE
+    PRINT_SYMBOL,
+    PRINT_SPACE,
+    PRINT_NEWLINE
 } state_t;
+
+// globaalit IMU:n arvot
+float ax, ay, az, gx, gy, gz, t;
+
+// Välilyöntilaskuri
+int space_counter = 0;
+char symbol;
 
 // oletustila
 volatile state_t state = WAITING;
@@ -46,20 +44,33 @@ typedef enum {
 
 
 static void btn_fxn(uint gpio, uint32_t eventMask) {
+    //Tila vaihtuu
+
     if (gpio == BUTTON1 && (eventMask & GPIO_IRQ_EDGE_FALL)) {
-        button1_pressed = true;
+        space_counter = 0; // Reset space counter when button 1 is pressed
+        state = READ_SENSOR;
+        
     }
 
-    if (gpio == BUTTON2) {
-        if (eventMask & GPIO_IRQ_EDGE_FALL) {
-            button2_press_time = xTaskGetTickCountFromISR();
-        }
-        else if (eventMask & GPIO_IRQ_EDGE_RISE) {
-            button2_release_time = xTaskGetTickCountFromISR();
-            button2_released = true;
+    if (gpio == BUTTON2 && (eventMask & GPIO_IRQ_EDGE_FALL)) {
+            space_counter++;
+            if (space_counter == 3) {
+                state = PRINT_NEWLINE;
+                space_counter = 0;
+            }
+            else {
+                state = PRINT_SPACE;
         }
     }
+
+
+        // nappi1 -> menee tilaan: piste tai viiva -> menee tilaan: tulostus -> menee tilaan: odotus
+        //nappi 2 tulostaa välin.
+
+        // teillä on välilyöntilaskuri ja kun laskuri on == 3
+        // niin tulostaa rivin vaihdon 
 }
+
 /*
 
     Taski()
@@ -74,7 +85,6 @@ void sensor_task(void *pvParameters)
 {
     (void)pvParameters;
 
-    float ax, ay, az, gx, gy, gz, t;
 
     // Alustetaan IMU
     if (init_ICM42670() == 0) {
@@ -82,10 +92,12 @@ void sensor_task(void *pvParameters)
 
         if (ICM42670_start_with_default_values() != 0) {
             printf("Could not initialize accelerometer or gyroscope\n");
+            vTaskDelete(NULL);
         }
 
     } else {
         printf("Failed to initialize ICM-42670P.\n");
+        vTaskDelete(NULL);
     }
 
     while (1)
@@ -94,49 +106,83 @@ void sensor_task(void *pvParameters)
         if (ICM42670_read_sensor_data(&ax, &ay, &az,
                                       &gx, &gy, &gz, &t) == 0) {
 
-            // Nappi 1: piste tai viiva
-            if (button1_pressed) {
-                button1_pressed = false;
-
-                if (fabsf(az) > 0.7f) {
-                    printf(".");
-                }
-                else if (fabsf(ax) > 0.7f || fabsf(ay) > 0.7f) {
-                    printf("-");
-                }
-            }
-
-            // Nappi 2: lyhyt tai pitkä painallus
-            if (button2_released) {
-                button2_released = false;
-
-                TickType_t duration =
-                    button2_release_time - button2_press_time;
-
-                if (duration >= pdMS_TO_TICKS(2000)) {
-                    printf("  \n");
-                }
-                else {
-                    printf(" ");
-                }
-            }
+            
 
         } else {
             printf("Failed to read imu data\n");
         }
 
-        vTaskDelay(10);
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
+// merkkien tulostus
+void print_task(void *pvParameters)
+{
+    (void)pvParameters;
 
+    while (1)
+    {
+        switch (state)
+        {
+            // Ei tapahdu mitään
+            case WAITING:
+                break;
+
+            // Tunnistetaan Picon asento
+            case READ_SENSOR:
+
+                if (fabsf(az) > 0.7f) {
+                    symbol = '.';
+                }
+                else if (fabsf(ax) > 0.7f || fabsf(ay) > 0.7f) {
+                    symbol = '-';
+                }
+                else {
+                    symbol = '\0';
+                }
+
+                state = PRINT_SYMBOL;
+                break;
+
+            // Tulostetaan piste tai viiva
+            case PRINT_SYMBOL:
+
+                if (symbol != '\0') {
+                    printf("%c", symbol);
+                }
+
+                state = WAITING;
+                break;
+
+            // Tulostetaan välilyönti
+            case PRINT_SPACE:
+
+                printf(" ");
+                state = WAITING;
+                break;
+
+            // Päätetään viesti
+            case PRINT_NEWLINE:
+
+                printf("\n");
+                state = WAITING;
+                break;
+
+            default:
+                state = WAITING;
+                break;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
 
 /* tehkää taski mitatkaa sen sisällä IMUn arvoja
 
 tehkää napinkeskeytyskäsittelijä
 
 nappi tulostaa arvoja
-
 
 */
 
@@ -153,7 +199,7 @@ int main() {
     init_sw2();
 
     gpio_set_irq_enabled_with_callback(BUTTON1, GPIO_IRQ_EDGE_FALL, true, btn_fxn);
-    gpio_set_irq_enabled_with_callback(BUTTON2, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, true, btn_fxn);
+    gpio_set_irq_enabled(BUTTON2, GPIO_IRQ_EDGE_FALL, true);
 
     /*btn_fxn(){
         if(nappi = 1)
@@ -179,7 +225,7 @@ int main() {
     } */
 
 
-    TaskHandle_t sensorTask = NULL;
+    TaskHandle_t sensorTask, printTask = NULL;
 
     BaseType_t result = xTaskCreate(
         sensor_task,
@@ -194,6 +240,15 @@ int main() {
         printf("Sensor Task creation failed\n");
         return 0;
     }
+
+    result = xTaskCreate(
+        print_task,
+        "PrintTask",
+        DEFAULT_STACK_SIZE,
+        NULL,
+        2,
+        &printTask
+    );
     // Start the scheduler (never returns)
     vTaskStartScheduler();
 
