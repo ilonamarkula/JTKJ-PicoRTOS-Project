@@ -25,14 +25,14 @@ typedef enum {
     PRINT_NEWLINE
 } state_t;
 
-// globaalit IMU:n arvot
+// Globaalit IMU:n arvot
 float ax, ay, az, gx, gy, gz, t;
 
 // Välilyöntilaskuri
 int space_counter = 0;
 char symbol;
 
-// oletustila
+// Oletustila
 volatile state_t state = WAITING;
 
 // Picon asennot
@@ -44,22 +44,20 @@ typedef enum {
 
 
 static void btn_fxn(uint gpio, uint32_t eventMask) {
-    //Tila vaihtuu
 
+    //Tila vaihtuu
     if (gpio == BUTTON1 && (eventMask & GPIO_IRQ_EDGE_FALL)) {
         space_counter = 0; // Reset space counter when button 1 is pressed
         state = READ_SENSOR;
-        
     }
 
     if (gpio == BUTTON2 && (eventMask & GPIO_IRQ_EDGE_FALL)) {
-            space_counter++;
-            if (space_counter == 3) {
-                state = PRINT_NEWLINE;
-                space_counter = 0;
-            }
-            else {
-                state = PRINT_SPACE;
+        space_counter++;
+        if (space_counter == 3) {
+            state = PRINT_NEWLINE;
+            space_counter = 0;
+        } else {
+            state = PRINT_SPACE;
         }
     }
 
@@ -81,10 +79,8 @@ static void btn_fxn(uint gpio, uint32_t eventMask) {
 */
 
 // IMU:n lukeminen ja käsittely
-void sensor_task(void *pvParameters)
-{
+static void sensor_task(void *pvParameters) {
     (void)pvParameters;
-
 
     // Alustetaan IMU
     if (init_ICM42670() == 0) {
@@ -100,15 +96,12 @@ void sensor_task(void *pvParameters)
         vTaskDelete(NULL);
     }
 
-    while (1)
-    {
+    while (1) {
         // Luetaan IMU:n arvot
+        // Tallennetaan suoraan globaaleihin muuttujiin,
+        // virheen sattuessa printf
         if (ICM42670_read_sensor_data(&ax, &ay, &az,
-                                      &gx, &gy, &gz, &t) == 0) {
-
-            
-
-        } else {
+                                      &gx, &gy, &gz, &t) != 0) {
             printf("Failed to read imu data\n");
         }
 
@@ -116,15 +109,12 @@ void sensor_task(void *pvParameters)
     }
 }
 
-// merkkien tulostus
-void print_task(void *pvParameters)
-{
+// Merkkien tulostus
+static void print_task(void *pvParameters) {
     (void)pvParameters;
 
-    while (1)
-    {
-        switch (state)
-        {
+    while (1) {
+        switch (state) {
             // Ei tapahdu mitään
             case WAITING:
                 break;
@@ -178,6 +168,55 @@ void print_task(void *pvParameters)
     }
 }
 
+// Summerin soiminen
+static void buzzer_task(void *pvParameters) {
+    (void)pvParameters;
+
+    init_buzzer();
+
+    while (1) {
+
+        /*
+        hat_example:
+
+        if (sw2_pressed) {
+            buzzer_play_tone(440, 500);
+        }
+        vTaskDelay(10);
+
+
+
+        hello_hat example:
+
+        buzzer_play_tone (440, 500);
+        vTaskDelay(pdMS_TO_TICKS(6000));
+
+        */
+    }
+}
+
+// LCD näytölle tulostus
+static void display_task(void *arg) {
+    (void)arg;
+
+    init_display();
+
+
+    /*
+    hello_hat example:
+
+    static int counter = 0; 
+
+    while (1) {
+        clear_display();
+        char buf[5]; //Store a number of maximum 5 figures 
+        sprintf(buf,"%d",counter++);
+        write_text(buf);
+        vTaskDelay(pdMS_TO_TICKS(4000));
+    }
+    */
+}
+
 /* tehkää taski mitatkaa sen sisällä IMUn arvoja
 
 tehkää napinkeskeytyskäsittelijä
@@ -197,46 +236,28 @@ int main() {
 
     init_sw1();
     init_sw2();
-
+    
     gpio_set_irq_enabled_with_callback(BUTTON1, GPIO_IRQ_EDGE_FALL, true, btn_fxn);
     gpio_set_irq_enabled(BUTTON2, GPIO_IRQ_EDGE_FALL, true);
 
-    /*btn_fxn(){
-        if(nappi = 1)
-        //tekee jtoain
 
-        jos nappi= 2
-        /tekee jotain
-    }*/
-
-    /*
-    TaskHandle_t myExampleTask = NULL;
-    // Create the tasks with xTaskCreate
-    BaseType_t result = xTaskCreate(example_task,       // (en) Task function
-                "example",              // (en) Name of the task 
-                DEFAULT_STACK_SIZE, // (en) Size of the stack for this task (in words). Generally 1024 or 2048
-                NULL,               // (en) Arguments of the task 
-                2,                  // (en) Priority of this task
-                &myExampleTask);    // (en) A handle to control the execution of this task
-
-    if(result != pdPASS) {
-        printf("Example Task creation failed\n");
-        return 0;
-    } */
+    // Tästä alaspäin on pelkkää taskien luomista
 
 
-    TaskHandle_t sensorTask, printTask = NULL;
+    // Periaatteessa tätä TaskHandle_t me ei kai tarvita, et vois
+    // vaan suoraan laittaa xTaskCreate() vikaan kohtaan NULL
+    // (kysykää AI en osaa selittää T:Iitu)
+    TaskHandle_t sensorTask, printTask, buzzerTask, displayTask = NULL;
 
     BaseType_t result = xTaskCreate(
-        sensor_task,
-        "SensorTask",
-        DEFAULT_STACK_SIZE,
-        NULL,
-        2,
-        &sensorTask
+        sensor_task,                // taskifunktio
+        "SensorTask",               // taskin nimi
+        DEFAULT_STACK_SIZE,         // stack size
+        NULL,                       // taskin argumentit
+        2,                          // prioriteetti
+        &sensorTask                 // TaskHandle (kahva)
     );
-
-    if(result != pdPASS) {
+    if (result != pdPASS) {
         printf("Sensor Task creation failed\n");
         return 0;
     }
@@ -249,11 +270,40 @@ int main() {
         2,
         &printTask
     );
+    if (result != pdPASS) {
+        printf("Print Task creation failed\n");
+        return 0;
+    }
+
+    result = xTaskCreate(
+        buzzer_task,
+        "BuzzerTask",
+        DEFAULT_STACK_SIZE,
+        NULL,
+        2,
+        &buzzerTask
+    );
+    if (result != pdPASS) {
+        printf("Buzzer Task creation failed\n");
+        return 0;
+    }
+
+    result = xTaskCreate(
+        display_task,
+        "DisplayTask",
+        DEFAULT_STACK_SIZE,
+        NULL,
+        2,
+        &displayTask
+    );
+    if (result != pdPASS) {
+        printf("Display Task creation failed\n");
+        return 0;
+    }
+
     // Start the scheduler (never returns)
     vTaskStartScheduler();
 
     // Never reach this line.
     return 0;
-    
 }
-
