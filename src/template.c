@@ -32,6 +32,9 @@ float ax, ay, az, gx, gy, gz, t;
 int space_counter = 0;
 char symbol;
 
+// Summerin FreeRTOS-jonon kahva
+QueueHandle_t buzzerQueue = NULL;
+
 // Oletustila
 volatile state_t state = WAITING;
 
@@ -140,6 +143,9 @@ static void print_task(void *pvParameters) {
 
                 if (symbol != '\0') {
                     printf("%c", symbol);
+
+                    // Lähetetään morsemerkki summerijonoon
+                    xQueueSend(buzzerQueue, &symbol, 0);
                 }
 
                 state = WAITING;
@@ -168,30 +174,34 @@ static void print_task(void *pvParameters) {
     }
 }
 
-// Summerin soiminen
+// Morsemerkkien äänet
+static void play_morse_sound(char symbol) {
+    
+    if (symbol == '.') {
+        buzzer_play_tone(440, 150);  // Lyhyt piippaus
+    }
+    
+    else if (symbol == '-') {
+        buzzer_play_tone(440, 450);  // Pitkä piippaus
+    }
+}
+
+// Summerin FreeRTOS-taski
 static void buzzer_task(void *pvParameters) {
     (void)pvParameters;
 
     init_buzzer();
 
+    // Vastaanotettava morsemerkki
+    char receivedSymbol;
+
     while (1) {
 
-        /*
-        hat_example:
+        // Odottaa merkkiä summerijonosta
+        if (xQueueReceive(buzzerQueue, &receivedSymbol, portMAX_DELAY) == pdTRUE) {
 
-        if (sw2_pressed) {
-            buzzer_play_tone(440, 500);
+            play_morse_sound(receivedSymbol);
         }
-        vTaskDelay(10);
-
-
-
-        hello_hat example:
-
-        buzzer_play_tone (440, 500);
-        vTaskDelay(pdMS_TO_TICKS(6000));
-
-        */
     }
 }
 
@@ -233,6 +243,15 @@ int main() {
     }*/ 
     init_hat_sdk();
     sleep_ms(300); //Wait some time so initialization of USB and hat is done.
+
+    // Luo summerin FreeRTOS jonon
+    buzzerQueue = xQueueCreate(5, sizeof(char));
+
+    // Tarkistaa epäonnistuiko jonon luominen
+    if (buzzerQueue == NULL) {
+        printf("Buzzer queue creation failed\n");
+        return 0;
+    }
 
     init_sw1();
     init_sw2();
