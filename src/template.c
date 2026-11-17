@@ -14,7 +14,10 @@
 #include <math.h>
 
 // Default stack size for the tasks. It can be reduced to 1024 if task is not using lot of memory.
-#define DEFAULT_STACK_SIZE 2048 
+#define DEFAULT_STACK_SIZE 2048
+
+// Bufferikoko receive_taskille (merkit työasemalta Picolle)
+#define INPUT_BUFFER_SIZE 256
 
 // Ohjelman tilat
 typedef enum {
@@ -32,8 +35,9 @@ float ax, ay, az, gx, gy, gz, t;
 int space_counter = 0;
 char symbol;
 
-// Summerin FreeRTOS-jonon kahva
+// Summerin ja LCD-näytön FreeRTOS-jonon kahvat
 QueueHandle_t buzzerQueue = NULL;
+QueueHandle_t displayQueue = NULL;
 
 // Oletustila
 volatile state_t state = WAITING;
@@ -174,15 +178,71 @@ static void print_task(void *pvParameters) {
     }
 }
 
+// Merkit työasemalta Picolle
+static void receive_task(void *pvParameters){
+    (void)pvParameters;
+    char line[INPUT_BUFFER_SIZE];
+    size_t index = 0;
+
+    while (1) {
+        int c = getchar_timeout_us(0); // Kurkistaa sarjaporttiin
+        if (c != PICO_ERROR_TIMEOUT) { // Merkki kirjoitettu
+            if (c == '\r') continue;
+
+            // Enter painettu, viesti valmis
+            if (c == '\n') {
+                line[index] = '\0';    
+                printf("__[RX]:\"%s\"__\n", line); // Debug-viesti terminaaliin
+
+                // Lähetetään koko viesti LCD jonoon
+                xQueueSend(displayQueue, line, 0);
+
+                // Lähetetään viesti merkki kerrallaan summerijonoon
+                for (size_t i = 0; i < index; i++) {
+                    xQueueSend(buzzerQueue, &line[i], portMAX_DELAY);
+                }
+                index = 0;
+                vTaskDelay(pdMS_TO_TICKS(100));
+            }
+
+            // Kirjoitetaan lisää merkkejä jos bufferissa on tilaa
+            else if (index < INPUT_BUFFER_SIZE -1 ) {
+                line[index++] = (char)c;
+            }
+
+            // Bufferi täynnä, printataan ja lähetetään viesti samallain ku ylempänä
+            else {
+                line[INPUT_BUFFER_SIZE - 1] = '\0';
+                printf("__[RX]:\"%s\"__\n", line);
+                xQueueSend(displayQueue, line, 0);
+                for (size_t i = 0; i < INPUT_BUFFER_SIZE - 1; i++) {
+                    xQueueSend(buzzerQueue, &line[i], portMAX_DELAY);
+                }
+                index = 0; 
+                line[index++] = (char)c; 
+            }
+        }
+        else {
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+}
+
 // Morsemerkkien äänet
 static void play_morse_sound(char symbol) {
-    
     if (symbol == '.') {
-        buzzer_play_tone(440, 150);  // Lyhyt piippaus
+        buzzer_play_tone(440, 150);     // Lyhyt piippaus
+        vTaskDelay(pdMS_TO_TICKS(100)); // Tauko piippausten välissä selkeyttää
     }
     
     else if (symbol == '-') {
-        buzzer_play_tone(440, 450);  // Pitkä piippaus
+        buzzer_play_tone(440, 450);     // Pitkä piippaus
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    // Lisäsin taukoja että piippauksia on helpompi kuunnella T:iitu
+    else if (symbol == ' ') {
+        vTaskDelay(pdMS_TO_TICKS(300)); // Tauko kirjainten ja sanojen välissä
     }
 }
 
@@ -206,25 +266,23 @@ static void buzzer_task(void *pvParameters) {
 }
 
 // LCD näytölle tulostus
-static void display_task(void *arg) {
-    (void)arg;
+static void display_task(void *pvParameters) {
+    (void)pvParameters;
 
     init_display();
+    clear_display();
+    write_text("Valmis!"); // Alkuteksti ruudulle
 
-
-    /*
-    hello_hat example:
-
-    static int counter = 0; 
+    char receivedLine[INPUT_BUFFER_SIZE];
 
     while (1) {
-        clear_display();
-        char buf[5]; //Store a number of maximum 5 figures 
-        sprintf(buf,"%d",counter++);
-        write_text(buf);
-        vTaskDelay(pdMS_TO_TICKS(4000));
+        // Odottaa viestiä LCD jonosta
+        if (xQueueReceive(displayQueue, receivedLine, portMAX_DELAY) == pdTRUE) {
+            clear_display();
+            write_text(receivedLine);
+        }
     }
-    */
+    
 }
 
 /* tehkää taski mitatkaa sen sisällä IMUn arvoja
@@ -245,11 +303,20 @@ int main() {
     sleep_ms(300); //Wait some time so initialization of USB and hat is done.
 
     // Luo summerin FreeRTOS jonon
-    buzzerQueue = xQueueCreate(5, sizeof(char));
+    buzzerQueue = xQueueCreate(64, sizeof(char));
+    // Minä iitu kasvatin bufferin kokoa 5 -> 64, voi vielä tarvittaessa kasvattaa
+    // kokoon INPUT_BUFFER_SIZE, emt paljonko tarvii
 
     // Tarkistaa epäonnistuiko jonon luominen
     if (buzzerQueue == NULL) {
         printf("Buzzer queue creation failed\n");
+        return 0;
+    }
+
+    // Luo LCD-näytön FreeRTOS jonon
+    displayQueue = xQueueCreate(3, sizeof(char[INPUT_BUFFER_SIZE]));
+    if (displayQueue == NULL) {
+        printf("Display queue creation failed\n");
         return 0;
     }
 
@@ -266,7 +333,7 @@ int main() {
     // Periaatteessa tätä TaskHandle_t me ei kai tarvita, et vois
     // vaan suoraan laittaa xTaskCreate() vikaan kohtaan NULL
     // (kysykää AI en osaa selittää T:Iitu)
-    TaskHandle_t sensorTask, printTask, buzzerTask, displayTask = NULL;
+    TaskHandle_t sensorTask, printTask, receiveTask, buzzerTask, displayTask = NULL;
 
     BaseType_t result = xTaskCreate(
         sensor_task,                // taskifunktio
@@ -291,6 +358,19 @@ int main() {
     );
     if (result != pdPASS) {
         printf("Print Task creation failed\n");
+        return 0;
+    }
+
+    result = xTaskCreate(
+        receive_task,
+        "ReceiveTask",
+        DEFAULT_STACK_SIZE,
+        NULL,
+        2,
+        &receiveTask
+    );
+    if (result != pdPASS) {
+        printf("Receive Task creation failed\n");
         return 0;
     }
 
