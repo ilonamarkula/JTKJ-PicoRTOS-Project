@@ -12,6 +12,7 @@
 
 #include <stdbool.h>
 #include <math.h>
+#include <ctype.h>
 
 // Default stack size for the tasks. It can be reduced to 1024 if task is not using lot of memory.
 #define DEFAULT_STACK_SIZE 2048
@@ -192,7 +193,31 @@ static void receive_task(void *pvParameters){
             // Enter painettu, viesti valmis
             if (c == '\n') {
                 line[index] = '\0';    
+                for (size_t i = 0; i < index; i++) {
+                    line[i] = tolower((unsigned char)line[i]);
+                }
                 printf("__[RX]:\"%s\"__\n", line); // Debug-viesti terminaaliin
+
+                // Musiikin 1 aiheuttavan merkkijonon tarkistus
+                if (strcmp(line, "67") == 0 ||
+                    strcmp(line, "sixseven") == 0 ||
+                    strcmp(line, "six seven") == 0) {
+
+                        printf("67\n"); // Tarkistusprintti että tunnistus toimii
+                        char melody = '@';
+                        xQueueSend(buzzerQueue, &melody, portMAX_DELAY);
+
+                    }
+
+                // Musiikin 2 aiheuttavan merkkijonon tarkistus
+                else if (strcmp(line, "69") == 0 ||
+                        strcmp(line, "sixnine") == 0 ||
+                        strcmp(line, "six nine") == 0) {
+                            
+                            printf("69\n"); // Tarkistusprintti että tunnistus toimii
+                            char melody = '#';
+                            xQueueSend(buzzerQueue, &melody, portMAX_DELAY);
+                        }   
 
                 // Lähetetään koko viesti LCD jonoon
                 xQueueSend(displayQueue, line, 0);
@@ -246,6 +271,20 @@ static void play_morse_sound(char symbol) {
     }
 }
 
+//Melodia viestille 67
+static void play_melody_67(void) {
+    buzzer_play_tone(262, 200);  // C
+    buzzer_play_tone(330, 200);  // E
+    buzzer_play_tone(392, 400);  // G
+}
+
+static void play_melody_69(void) {
+    buzzer_play_tone(392, 200);  // G
+    buzzer_play_tone(330, 200);  // E
+    buzzer_play_tone(262, 400);  // C
+}
+
+
 // Summerin FreeRTOS-taski
 static void buzzer_task(void *pvParameters) {
     (void)pvParameters;
@@ -260,7 +299,16 @@ static void buzzer_task(void *pvParameters) {
         // Odottaa merkkiä summerijonosta
         if (xQueueReceive(buzzerQueue, &receivedSymbol, portMAX_DELAY) == pdTRUE) {
 
-            play_morse_sound(receivedSymbol);
+            if (receivedSymbol == '@') {
+                play_melody_67();
+            }
+
+            else if(receivedSymbol == '#') {
+                play_melody_69();
+            }
+            else {
+                play_morse_sound(receivedSymbol);
+            }
         }
     }
 }
