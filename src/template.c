@@ -29,7 +29,7 @@ typedef enum {
 } state_t;
 
 // Globaalit IMU:n arvot
-float ax, ay, az, gx, gy, gz, t;
+float ax, ay,az, gx, gy, gz, t;
 
 // Välilyöntilaskuri
 int space_counter = 0;
@@ -66,6 +66,8 @@ static void btn_fxn(uint gpio, uint32_t eventMask) {
         } else {
             state = PRINT_SPACE;
         }
+
+
     }
 
 
@@ -107,12 +109,11 @@ static void sensor_task(void *pvParameters) {
         // Luetaan IMU:n arvot
         // Tallennetaan suoraan globaaleihin muuttujiin,
         // virheen sattuessa printf
-        if (ICM42670_read_sensor_data(&ax, &ay, &az,
-                                      &gx, &gy, &gz, &t) != 0) {
+        if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0){
+        } else {
             printf("Failed to read imu data\n");
         }
-
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
 
@@ -128,23 +129,21 @@ static void print_task(void *pvParameters) {
 
             // Tunnistetaan Picon asento
             case READ_SENSOR:
-
-                if (fabsf(az) > 0.7f) {
-                    symbol = '.';
-                }
-                else if (fabsf(ax) > 0.7f || fabsf(ay) > 0.7f) {
+                vTaskDelay(pdMS_TO_TICKS(500));
+                symbol = '\0';
+                if (fabsf(az) > 0.5f) {
                     symbol = '-';
                 }
-                else {
-                    symbol = '\0';
+                else if (fabsf(az) < 0.5f) {
+                    symbol = '.';
                 }
+                
 
                 state = PRINT_SYMBOL;
                 break;
 
             // Tulostetaan piste tai viiva
             case PRINT_SYMBOL:
-
                 if (symbol != '\0') {
                     printf("%c", symbol);
 
