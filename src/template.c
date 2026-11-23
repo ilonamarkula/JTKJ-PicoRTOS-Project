@@ -39,6 +39,8 @@ char symbol;
 QueueHandle_t buzzerQueue = NULL;
 QueueHandle_t displayQueue = NULL;
 
+TaskHandle_t sensorTask = NULL;
+
 // Oletustila
 volatile state_t state = WAITING;
 
@@ -66,26 +68,8 @@ static void btn_fxn(uint gpio, uint32_t eventMask) {
         } else {
             state = PRINT_SPACE;
         }
-
-
     }
-
-
-        // nappi1 -> menee tilaan: piste tai viiva -> menee tilaan: tulostus -> menee tilaan: odotus
-        //nappi 2 tulostaa välin.
-
-        // teillä on välilyöntilaskuri ja kun laskuri on == 3
-        // niin tulostaa rivin vaihdon 
 }
-
-/*
-
-    Taski()
-     taskin sisällä mitataan arvoja
-     ja kun nappia painetaan niin kutsutaan nappi keskeytyskäsittelijää
-     nappi tulostaa joko pisteen tai viivan
-
-*/
 
 // IMU:n lukeminen ja käsittely
 static void sensor_task(void *pvParameters) {
@@ -129,7 +113,7 @@ static void print_task(void *pvParameters) {
 
             // Tunnistetaan Picon asento
             case READ_SENSOR:
-                vTaskDelay(pdMS_TO_TICKS(500));
+                vTaskDelay(pdMS_TO_TICKS(200));
                 symbol = '\0';
                 if (fabsf(az) > 0.5f) {
                     symbol = '-';
@@ -138,7 +122,6 @@ static void print_task(void *pvParameters) {
                     symbol = '.';
                 }
                 
-
                 state = PRINT_SYMBOL;
                 break;
 
@@ -191,7 +174,7 @@ static void receive_task(void *pvParameters){
             // Enter painettu, viesti valmis
             if (c == '\n') {
                 line[index] = '\0';    
-                printf("__[RX]:\"%s\"__\n", line); // Debug-viesti terminaaliin
+                printf("\n__Työaseman viesti morsena:   %s__\n", line); // Debug-viesti terminaaliin
 
                 // Lähetetään koko viesti LCD jonoon
                 xQueueSend(displayQueue, line, 0);
@@ -212,7 +195,7 @@ static void receive_task(void *pvParameters){
             // Bufferi täynnä, printataan ja lähetetään viesti samallain ku ylempänä
             else {
                 line[INPUT_BUFFER_SIZE - 1] = '\0';
-                printf("__[RX]:\"%s\"__\n", line);
+                printf("\n__Työaseman viesti morsena:   %s__\n", line);
                 xQueueSend(displayQueue, line, 0);
                 for (size_t i = 0; i < INPUT_BUFFER_SIZE - 1; i++) {
                     xQueueSend(buzzerQueue, &line[i], portMAX_DELAY);
@@ -258,7 +241,6 @@ static void buzzer_task(void *pvParameters) {
 
         // Odottaa merkkiä summerijonosta
         if (xQueueReceive(buzzerQueue, &receivedSymbol, portMAX_DELAY) == pdTRUE) {
-
             play_morse_sound(receivedSymbol);
         }
     }
@@ -268,43 +250,36 @@ static void buzzer_task(void *pvParameters) {
 static void display_task(void *pvParameters) {
     (void)pvParameters;
 
-    init_display();
-    clear_display();
-    write_text("Valmis!"); // Alkuteksti ruudulle
-
     char receivedLine[INPUT_BUFFER_SIZE];
 
     while (1) {
         // Odottaa viestiä LCD jonosta
         if (xQueueReceive(displayQueue, receivedLine, portMAX_DELAY) == pdTRUE) {
+            vTaskSuspend(sensorTask); // Pysäytetään anturin luku päivityksen ajaksi
+
             clear_display();
             write_text(receivedLine);
+
+            vTaskResume(sensorTask);  // Jatketaan anturin lukua
         }
     }
-    
 }
-
-/* tehkää taski mitatkaa sen sisällä IMUn arvoja
-
-tehkää napinkeskeytyskäsittelijä
-
-nappi tulostaa arvoja
-
-*/
 
 int main() {
     stdio_init_all();
     // Uncomment this lines if you want to wait till the serial monitor is connected
     /*while (!stdio_usb_connected()){
-        sleep_ms(10);
+        sleep_ms(
     }*/ 
     init_hat_sdk();
     sleep_ms(300); //Wait some time so initialization of USB and hat is done.
 
+    init_display();
+    clear_display();
+    write_text("Valmis!"); // Alkuteksti ruudulle
+    
     // Luo summerin FreeRTOS jonon
     buzzerQueue = xQueueCreate(64, sizeof(char));
-    // Minä iitu kasvatin bufferin kokoa 5 -> 64, voi vielä tarvittaessa kasvattaa
-    // kokoon INPUT_BUFFER_SIZE, emt paljonko tarvii
 
     // Tarkistaa epäonnistuiko jonon luominen
     if (buzzerQueue == NULL) {
@@ -328,11 +303,9 @@ int main() {
 
     // Tästä alaspäin on pelkkää taskien luomista
 
-
     // Periaatteessa tätä TaskHandle_t me ei kai tarvita, et vois
     // vaan suoraan laittaa xTaskCreate() vikaan kohtaan NULL
-    // (kysykää AI en osaa selittää T:Iitu)
-    TaskHandle_t sensorTask, printTask, receiveTask, buzzerTask, displayTask = NULL;
+    TaskHandle_t printTask, receiveTask, buzzerTask, displayTask = NULL;
 
     BaseType_t result = xTaskCreate(
         sensor_task,                // taskifunktio
