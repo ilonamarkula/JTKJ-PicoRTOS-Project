@@ -14,27 +14,11 @@
 #include <math.h>
 #include <ctype.h>
 
-// Default stack size for the tasks. It can be reduced to 1024 if task is not using lot of memory.
+// Pinokoko
 #define DEFAULT_STACK_SIZE 2048
 
 // Bufferikoko receive_taskille (merkit työasemalta Picolle)
 #define INPUT_BUFFER_SIZE 256
-
-// Star Wars -melodian nuottien taajuudet (Hz)
-#define NOTE_C5  523
-#define NOTE_D5  587
-#define NOTE_E5  659
-#define NOTE_F5  698
-#define NOTE_G5  784
-#define NOTE_GS5 831
-#define NOTE_A5  880
-#define NOTE_AS4 466
-#define NOTE_AS5 932
-#define NOTE_C6  1047
-#define NOTE_CS6 1109
-#define NOTE_DS6 1245
-#define NOTE_F6  1397
-#define REST     0
 
 // Ohjelman tilat
 typedef enum {
@@ -48,9 +32,8 @@ typedef enum {
 // Globaalit IMU:n arvot
 float ax, ay,az, gx, gy, gz, t;
 
-// Välilyöntilaskuri
-int space_counter = 0;
-char symbol;
+int space_counter = 0; // Välilyöntilaskuri
+char symbol; // Tulostettava merkki
 
 // Summerin ja LCD-näytön FreeRTOS-jonon kahvat
 QueueHandle_t buzzerQueue = NULL;
@@ -73,7 +56,7 @@ static void btn_fxn(uint gpio, uint32_t eventMask) {
 
     //Tila vaihtuu
     if (gpio == BUTTON1 && (eventMask & GPIO_IRQ_EDGE_FALL)) {
-        space_counter = 0; // Reset space counter when button 1 is pressed
+        space_counter = 0; // välilyöntilaskuri nollaksi kun painetaan nappi1
         state = READ_SENSOR;
     }
 
@@ -178,72 +161,6 @@ static void print_task(void *pvParameters) {
 }
 
 // Merkit työasemalta Picolle
-// Merkit työasemalta Picolle
-static void receive_task(void *pvParameters){
-    (void)pvParameters;
-    char line[INPUT_BUFFER_SIZE];
-    size_t index = 0;
-
-    while (1) {
-        int c = getchar_timeout_us(0); // Kurkistaa sarjaporttiin
-        if (c != PICO_ERROR_TIMEOUT) { // Merkki kirjoitettu
-            if (c == '\r') continue;
-
-            // Enter painettu, viesti valmis
-            if (c == '\n') {
-                line[index] = '\0';
-
-                // Poistetaan mahdolliset lopun välilyönnit (esim. "six seven  ")
-                while (index > 0 && line[index - 1] == ' ') {
-                    line[--index] = '\0';
-                }
-
-                for (size_t i = 0; i < index; i++) {
-                    line[i] = tolower((unsigned char)line[i]);
-                }
-                printf("__[RX]:\"%s\"__\n", line);
-
-                // Musiikin aiheuttavan merkkijonon tarkistus ("67" / "six seven")
-                if (strcmp(line, "67") == 0 ||
-                    strcmp(line, "sixseven") == 0 ||
-                    strcmp(line, "six seven") == 0) {
-
-                    printf("__67__\n");
-                    char melody = '@';
-                    xQueueSend(buzzerQueue, &melody, portMAX_DELAY);
-                }
-                // Tavallinen morsekoodiviesti -> lähetetään VAIN displayQueue-jonoon!
-                // (display_task hoitaa sekä LCD-näytön että summerin synkronoidusti)
-                else {
-                    xQueueSend(displayQueue, line, portMAX_DELAY);
-                }
-
-                index = 0;
-                vTaskDelay(pdMS_TO_TICKS(100));
-            }
-
-            // Kirjoitetaan lisää merkkejä jos bufferissa on tilaa
-            else if (index < INPUT_BUFFER_SIZE - 1) {
-                line[index++] = (char)c;
-            }
-
-            // Bufferi täynnä
-            else {
-                line[INPUT_BUFFER_SIZE - 1] = '\0';
-                printf("__[RX]:\"%s\"__\n", line);
-                xQueueSend(displayQueue, line, portMAX_DELAY);
-                index = 0; 
-                line[index++] = (char)c; 
-            }
-        }
-        else {
-            vTaskDelay(pdMS_TO_TICKS(100));
-        }
-    }
-}
-
-/*
-// Merkit työasemalta Picolle
 static void receive_task(void *pvParameters){
     (void)pvParameters;
     char line[INPUT_BUFFER_SIZE];
@@ -288,7 +205,7 @@ static void receive_task(void *pvParameters){
         }
     }
 }
-    */
+    
 
 // Morsemerkkien äänet
 static void play_morse_sound(char symbol) {
@@ -307,70 +224,6 @@ static void play_morse_sound(char symbol) {
     }
 }
 
-static void play_melody_67(void) {
-    uint16_t melody[] = {
-        NOTE_AS4, NOTE_AS4, NOTE_AS4, NOTE_F5, NOTE_C6, NOTE_AS5, NOTE_A5, NOTE_G5, NOTE_F6, NOTE_C6,
-        NOTE_AS5, NOTE_A5, NOTE_G5, NOTE_F6, NOTE_C6, NOTE_AS5, NOTE_A5, NOTE_AS5, NOTE_G5, NOTE_C5,
-        NOTE_C5, NOTE_C5, NOTE_F5, NOTE_C6, NOTE_AS5, NOTE_A5, NOTE_G5, NOTE_F6, NOTE_C6, NOTE_AS5,
-        NOTE_A5, NOTE_G5, NOTE_F6, NOTE_C6, NOTE_AS5, NOTE_A5, NOTE_AS5, NOTE_G5, NOTE_C5, NOTE_C5,
-        NOTE_D5, NOTE_D5, NOTE_AS5, NOTE_A5, NOTE_G5, NOTE_F5, NOTE_F5, NOTE_G5, NOTE_A5, NOTE_G5,
-        NOTE_D5, NOTE_E5, NOTE_C5, NOTE_C5, NOTE_D5, NOTE_D5, NOTE_AS5, NOTE_A5, NOTE_G5, NOTE_F5,
-        NOTE_C6, NOTE_G5, NOTE_G5, REST, NOTE_C5, NOTE_D5, NOTE_D5, NOTE_AS5, NOTE_A5, NOTE_G5,
-        NOTE_F5, NOTE_F5, NOTE_G5, NOTE_A5, NOTE_G5, NOTE_D5, NOTE_E5, NOTE_C6, NOTE_C6, NOTE_F6,
-        NOTE_DS6, NOTE_CS6, NOTE_C6, NOTE_AS5, NOTE_GS5, NOTE_G5, NOTE_F5, NOTE_C6
-    };
-
-    uint32_t durations[] = {
-        8, 8, 8, 2, 2, 8, 8, 8, 2, 4,
-        8, 8, 8, 2, 4, 8, 8, 8, 2, 8,
-        8, 8, 2, 2, 8, 8, 8, 2, 4, 8,
-        8, 8, 2, 4, 8, 8, 8, 2, 8, 16,
-        4, 8, 8, 8, 8, 8, 8, 8, 8, 4,
-        8, 4, 8, 16, 4, 8, 8, 8, 8, 8,
-        8, 16, 2, 8, 8, 4, 8, 8, 8, 8,
-        8, 8, 8, 8, 4, 8, 4, 8, 16, 4,
-        8, 4, 8, 4, 8, 4, 8, 1
-    };
-
-    int size = sizeof(durations) / sizeof(durations[0]);
-
-    for (int note = 0; note < size; note++) {
-        uint32_t duration = 1000 / durations[note]; // Nuotin kesto millisekunteina
-        uint32_t pause = duration * 0.30;           // Tauko nuottien välissä (erottelee sävelet)
-
-        if (melody[note] == REST) {
-            vTaskDelay(pdMS_TO_TICKS(duration));
-        } else {
-            buzzer_play_tone(melody[note], duration);
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(pause));
-    }
-}
-
-// Summerin FreeRTOS-taski
-static void buzzer_task(void *pvParameters) {
-    (void)pvParameters;
-
-    init_buzzer();
-
-    // Vastaanotettava morsemerkki
-    char receivedSymbol;
-
-    while (1) {
-        // Odottaa merkkiä summerijonosta
-        if (xQueueReceive(buzzerQueue, &receivedSymbol, portMAX_DELAY) == pdTRUE) {
-            if (receivedSymbol == '@') {
-                play_melody_67();
-            }
-            else {
-                play_morse_sound(receivedSymbol);
-            }
-        }
-    }
-}
-
-/*
 // Summerin FreeRTOS-taski
 static void buzzer_task(void *pvParameters) {
     (void)pvParameters;
@@ -388,8 +241,7 @@ static void buzzer_task(void *pvParameters) {
         }
     }
 }
-    */
-
+    
 // LCD-näytön ja työasemaviesti-summerin synkronoitu taski
 static void display_task(void *pvParameters) {
     (void)pvParameters;
@@ -445,110 +297,11 @@ static void display_task(void *pvParameters) {
     }
 }
 
-/*
-// LCD näytölle tulostus
-static void display_task(void *pvParameters) {
-    (void)pvParameters;
-
-    char receivedLine[INPUT_BUFFER_SIZE];
-    char letterBuf[16]; // Yhden kirjaimen morsemerkit (esim. "-..-")
-    int bufIdx = 0;
-
-    while (1) {
-        // Odottaa viestiä LCD jonosta
-        if (xQueueReceive(displayQueue, receivedLine, portMAX_DELAY) == pdTRUE) {
-            vTaskSuspend(sensorTask); // Pysäytetään anturin luku päivityksen ajaksi
-
-            clear_display();
-            vTaskDelay(pdMS_TO_TICKS(100));
-            bufIdx = 0;
-
-            for (int i = 0; ; i++) {
-                char c = receivedLine[i];
-
-                // Jos vastaan tulee välilyönti tai merkkijonon loppu
-                if (c == ' ' || c == '\0') {
-                    // Jos puskuriin on kertynyt kirjaimen merkkejä, näytetään ne kerralla
-                    if (bufIdx > 0) {
-                        letterBuf[bufIdx] = '\0';
-                        clear_display();
-                        write_text(letterBuf);
-                        vTaskDelay(pdMS_TO_TICKS(600)); // Kirjain näkyy ruudulla
-
-                        // Tyhjennetään näyttö kirjainten välissä
-                        clear_display();
-                        vTaskDelay(pdMS_TO_TICKS(300));
-                        bufIdx = 0;
-                    } 
-                    // Jos tulee toinen välilyönti peräkkäin (sanojen väli "  ")
-                    else if (c == ' ') {
-                        vTaskDelay(pdMS_TO_TICKS(400)); // Pidempi musta tauko sanojen välissä
-                    }
-
-                    if (c == '\0') {
-                        break; // Koko viesti käsitelty
-                    }
-                } 
-                // Kerätään '.' ja '-' merkit saman kirjaimen puskuriin
-                else if (bufIdx < (int)sizeof(letterBuf) - 1) {
-                    letterBuf[bufIdx++] = c;
-                }
-            }
-
-            clear_display();          // Jätetään näyttö mustaksi lopuksi
-            vTaskResume(sensorTask);  // Jatketaan anturin lukua
-        }
-    }
-}
-
-
-// LCD näytölle tulostus
-static void display_task(void *pvParameters) {
-    (void)pvParameters;
-
-    char receivedLine[INPUT_BUFFER_SIZE];
-    char symbolStr[2] = {'\0', '\0'}; // Yhden merkin merkkijono write_text-funktiolle
-
-    while (1) {
-        // Odottaa viestiä LCD jonosta
-        if (xQueueReceive(displayQueue, receivedLine, portMAX_DELAY) == pdTRUE) {
-            vTaskSuspend(sensorTask); // Pysäytetään anturin luku päivityksen ajaksi
-
-            clear_display();
-
-            for (int i = 0; receivedLine[i] != '\0'; i++) {
-                if (receivedLine[i] == ' ') {
-                    // Välilyönti: pidetään näyttö mustana pidempään
-                    clear_display();
-                    vTaskDelay(pdMS_TO_TICKS(450));
-                } else {
-                    // Näytetään yksi morsemerkki ('.' tai '-') kerrallaan
-                    symbolStr[0] = receivedLine[i];
-                    clear_display();
-                    write_text(symbolStr);
-                    vTaskDelay(pdMS_TO_TICKS(250)); // Aika, jonka merkki näkyy
-
-                    // Tyhjennetään näyttö mustaksi merkkien välissä (erottaa esim. "..")
-                    clear_display();
-                    vTaskDelay(pdMS_TO_TICKS(150));
-                }
-            }
-
-            clear_display();
-            vTaskResume(sensorTask);  // Jatketaan anturin lukua
-        }
-    }
-}
-    */
 
 int main() {
     stdio_init_all();
-    // Uncomment this lines if you want to wait till the serial monitor is connected
-    /*while (!stdio_usb_connected()){
-        sleep_ms(
-    }*/ 
     init_hat_sdk();
-    sleep_ms(300); //Wait some time so initialization of USB and hat is done.
+    sleep_ms(300); // Odotetaan hetki, että USB ja hat ehditään alustaa
 
     init_display();
     clear_display();
@@ -576,11 +329,6 @@ int main() {
     gpio_set_irq_enabled_with_callback(BUTTON1, GPIO_IRQ_EDGE_FALL, true, btn_fxn);
     gpio_set_irq_enabled(BUTTON2, GPIO_IRQ_EDGE_FALL, true);
 
-
-    // Tästä alaspäin on pelkkää taskien luomista
-
-    // Periaatteessa tätä TaskHandle_t me ei kai tarvita, et vois
-    // vaan suoraan laittaa xTaskCreate() vikaan kohtaan NULL
     TaskHandle_t printTask, receiveTask, buzzerTask, displayTask = NULL;
 
     BaseType_t result = xTaskCreate(
