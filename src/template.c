@@ -13,7 +13,7 @@
 #include <stdbool.h>
 #include <math.h>
 
-// Default stack size for the tasks. It can be reduced to 1024 if task is not using lot of memory.
+// Pinokoko taskeille
 #define DEFAULT_STACK_SIZE 2048
 
 // Bufferikoko receive_taskille (merkit työasemalta Picolle)
@@ -56,7 +56,7 @@ static void btn_fxn(uint gpio, uint32_t eventMask) {
 
     //Tila vaihtuu
     if (gpio == BUTTON1 && (eventMask & GPIO_IRQ_EDGE_FALL)) {
-        space_counter = 0; // Reset space counter when button 1 is pressed
+        space_counter = 0; // Space counter nollaksi kun painetaan nappi1
         state = READ_SENSOR;
     }
 
@@ -267,12 +267,8 @@ static void display_task(void *pvParameters) {
 
 int main() {
     stdio_init_all();
-    // Uncomment this lines if you want to wait till the serial monitor is connected
-    /*while (!stdio_usb_connected()){
-        sleep_ms(
-    }*/ 
     init_hat_sdk();
-    sleep_ms(300); //Wait some time so initialization of USB and hat is done.
+    sleep_ms(300); //Odotetaan hetki, että USB:n ja HATin alustukset on tehty
 
     init_display();
     clear_display();
