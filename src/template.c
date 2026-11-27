@@ -1,4 +1,4 @@
-
+// Group members: Heini Haarala, Ilona Markula and Iitu Raunama
 #include <stdio.h>
 #include <string.h>
 
